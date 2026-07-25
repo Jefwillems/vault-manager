@@ -2,6 +2,7 @@ package agent
 
 import (
 	"log/slog"
+	"strings"
 
 	copilot "github.com/github/copilot-sdk/go"
 	"github.com/github/copilot-sdk/go/rpc"
@@ -54,18 +55,27 @@ func newPermissionPolicy(log *slog.Logger) copilot.PermissionHandlerFunc {
 	}
 }
 
-// shellAllowed reports whether a shell request is limited to allowlisted
-// commands and touches no URLs or file redirections.
+// shellAllowed reports whether a shell request is a single, simple invocation of
+// an allowlisted command (mkdir/mv) with no way to chain, redirect, pipe,
+// substitute, or reach the network. It parses the literal command text rather
+// than trusting the runtime's parsed Commands list (which isn't reliably
+// populated for these commands).
 func shellAllowed(r *copilot.PermissionRequestShell) bool {
-	if len(r.Commands) == 0 || len(r.PossibleURLs) > 0 || r.HasWriteFileRedirection {
+	if len(r.PossibleURLs) > 0 || r.HasWriteFileRedirection {
 		return false
 	}
-	for _, c := range r.Commands {
-		if !shellAllowlist[c.Identifier] {
-			return false
-		}
+	text := strings.TrimSpace(r.FullCommandText)
+	if text == "" {
+		return false
 	}
-	return true
+	// Reject any shell metacharacter that could chain commands, redirect I/O,
+	// expand variables, or run command substitutions. This constrains the
+	// request to one plain command with literal arguments.
+	if strings.ContainsAny(text, "|&;<>`$\n\r\\") {
+		return false
+	}
+	fields := strings.Fields(text)
+	return len(fields) > 0 && shellAllowlist[fields[0]]
 }
 
 func reject(feedback string) rpc.PermissionDecision {
