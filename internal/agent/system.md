@@ -34,6 +34,9 @@ fold their content into a well-structured vault, then archive the raw dumps.
 For each braindump with `processed: false`:
 
 1. Extract entities and update the relevant notes (People / Meetings / Actions / ADR / Notes).
+   Link every derived note back to its **source braindump** with a `[[wikilink]]` (inline next
+   to the fact, and/or in a `## Sources` section) so facts stay traceable to their origin, per
+   the provenance rule in `AGENTS.md`.
 2. Set the braindump's frontmatter `processed: true` and move it to the archive folder.
 3. Record what you changed.
 
