@@ -33,9 +33,12 @@ const instruction = `Process the vault now.
 2. Find every note under the braindumps folder whose frontmatter has ` + "`processed: false`" + `.
 3. For each one, fold its content into the proper notes (People, Meetings, Actions, ADR, Notes),
    updating existing notes in place rather than creating duplicates, and linking entities with [[wikilinks]].
-4. Mark each processed braindump ` + "`processed: true`" + ` and move it to the archive folder.
+   The target folders (People, Meetings, Actions, ADR, Notes, History, Archive) already exist — just write files into them.
+4. Mark each processed braindump ` + "`processed: true`" + ` in its frontmatter. Do NOT move or delete the
+   braindump file yourself — the harness archives processed braindumps automatically after you finish.
 5. Write a concise summary of everything you changed to a dated file in the History folder.
 
+Use only the file tools (read/write). Shell and network access are disabled and unnecessary.
 If there are no unprocessed braindumps, do nothing and stop.`
 
 // Run executes one full agent pass over the vault. It returns nil when the agent

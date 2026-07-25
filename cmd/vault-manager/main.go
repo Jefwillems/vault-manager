@@ -53,6 +53,13 @@ func run() int {
 		return 0
 	}
 
+	// Pre-create the folder skeleton so the agent (which can only read/write
+	// files, not create directories) can write notes straight away.
+	if err := vault.EnsureLayout(cfg.VaultPath); err != nil {
+		log.Error("ensuring vault layout", "error", err)
+		return 1
+	}
+
 	// Bound the run and respond to termination signals from Kubernetes.
 	ctx, cancel := context.WithTimeout(context.Background(), cfg.RunTimeout)
 	defer cancel()
@@ -63,6 +70,15 @@ func run() int {
 		log.Error("run failed", "error", err)
 		return 1
 	}
+
+	// Deterministically archive the braindumps the agent marked processed,
+	// rather than relying on the agent's (shell-less) tools to move files.
+	moved, err := vault.ArchiveProcessed(cfg.VaultPath, cfg.BraindumpDir)
+	if err != nil {
+		log.Error("archiving processed braindumps", "error", err)
+		return 1
+	}
+	log.Info("archived processed braindumps", "count", len(moved), "files", moved)
 
 	log.Info("vault-manager finished")
 	return 0
