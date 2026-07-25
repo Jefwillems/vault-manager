@@ -67,6 +67,20 @@ func TestEnsureLayout(t *testing.T) {
 	}
 }
 
+func TestEnsureLayoutExtraDirs(t *testing.T) {
+	vaultPath := t.TempDir()
+	extra := []string{"Projects", "Areas/Work"}
+	if err := EnsureLayout(vaultPath, extra...); err != nil {
+		t.Fatalf("EnsureLayout: %v", err)
+	}
+	// Both the built-in layout and the extra dirs exist.
+	for _, dir := range append(append([]string{}, Layout...), extra...) {
+		if fi, err := os.Stat(filepath.Join(vaultPath, dir)); err != nil || !fi.IsDir() {
+			t.Errorf("expected directory %s to exist", dir)
+		}
+	}
+}
+
 func TestArchiveProcessed(t *testing.T) {
 	vaultPath := t.TempDir()
 	braindumpDir := "Braindumps"

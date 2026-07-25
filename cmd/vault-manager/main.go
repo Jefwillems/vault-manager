@@ -39,6 +39,7 @@ func run() int {
 		"reasoningEffort", cfg.ReasoningEffort,
 		"timeout", cfg.RunTimeout,
 		"force", cfg.Force,
+		"extraLayoutDirs", cfg.ExtraLayoutDirs,
 	)
 
 	// Pre-flight: skip the (billable) model call when there's nothing to do.
@@ -54,8 +55,9 @@ func run() int {
 	}
 
 	// Pre-create the folder skeleton so the agent (which can only read/write
-	// files, not create directories) can write notes straight away.
-	if err := vault.EnsureLayout(cfg.VaultPath); err != nil {
+	// files, not create directories) can write notes straight away. Extra dirs
+	// from EXTRA_LAYOUT_DIRS let new sections be added without an image rebuild.
+	if err := vault.EnsureLayout(cfg.VaultPath, cfg.ExtraLayoutDirs...); err != nil {
 		log.Error("ensuring vault layout", "error", err)
 		return 1
 	}

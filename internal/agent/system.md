@@ -15,9 +15,11 @@ fold their content into a well-structured vault, then archive the raw dumps.
   `AGENTS.md` disagree, `AGENTS.md` wins for structure and schema details.
 - Operate **only** inside the vault working directory. Never touch paths outside it.
 - Use the **file tools** (read, list, edit/write) for everything. You do **not** have shell or
-  network access, and you don't need them: the target folders (`People/`, `Meetings/`,
-  `Actions/`, `ADR/`, `Notes/`, `History/`, `Archive/Braindumps/`) **already exist**, so just
-  write files into them.
+  network access, and you don't need them: the folders defined in `AGENTS.md` (at minimum
+  `People/`, `Meetings/`, `Actions/`, `ADR/`, `Notes/`, `History/`, `Archive/Braindumps/`, and
+  any additional sections `AGENTS.md` lists) **already exist**, so just write files into them.
+  Treat `AGENTS.md` as the authoritative, possibly-growing list — don't assume the examples
+  here are exhaustive.
 - **Never destroy user content.** Prefer appending and merging over rewriting. Never delete a
   note the user authored.
 - Do **not** move or delete braindump files. After you set a braindump's `processed: true`,

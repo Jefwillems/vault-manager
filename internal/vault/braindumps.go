@@ -31,9 +31,12 @@ var Layout = []string{
 // ArchiveBraindumps is the vault-relative destination for processed braindumps.
 const ArchiveBraindumps = "Archive/Braindumps"
 
-// EnsureLayout creates the standard vault folders if they don't already exist.
-func EnsureLayout(vaultPath string) error {
-	for _, dir := range Layout {
+// EnsureLayout creates the standard vault folders if they don't already exist,
+// plus any extra vault-relative folders passed in (e.g. from EXTRA_LAYOUT_DIRS).
+// Extra dirs let new vault sections be added without rebuilding the image; they
+// are assumed pre-validated as safe relative paths by the caller (see config).
+func EnsureLayout(vaultPath string, extra ...string) error {
+	for _, dir := range append(append([]string{}, Layout...), extra...) {
 		if err := os.MkdirAll(filepath.Join(vaultPath, dir), 0o755); err != nil {
 			return fmt.Errorf("creating %s: %w", dir, err)
 		}
