@@ -34,10 +34,13 @@ type Config struct {
 // validates required fields.
 func Load() (*Config, error) {
 	cfg := &Config{
-		VaultPath:       env("VAULT_PATH", "/app/data/vault"),
-		BraindumpDir:    env("BRAINDUMP_DIR", "Braindumps"),
-		Model:           env("COPILOT_MODEL", "claude-sonnet-4.5"),
-		ReasoningEffort: env("COPILOT_REASONING_EFFORT", "high"),
+		VaultPath:    env("VAULT_PATH", "/app/data/vault"),
+		BraindumpDir: env("BRAINDUMP_DIR", "Braindumps"),
+		Model:        env("COPILOT_MODEL", "claude-sonnet-4.5"),
+		// Empty by default: many models (including claude-sonnet-4.5 via the
+		// Copilot API) reject an explicit reasoning-effort setting. Set this only
+		// for models where models.list reports reasoningEffort support.
+		ReasoningEffort: os.Getenv("COPILOT_REASONING_EFFORT"),
 		GitHubToken:     os.Getenv("COPILOT_GITHUB_TOKEN"),
 		LogLevel:        env("LOG_LEVEL", "info"),
 	}

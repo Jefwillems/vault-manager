@@ -57,13 +57,16 @@ func Run(ctx context.Context, log *slog.Logger, cfg *config.Config) error {
 		}
 	}()
 
-	session, err := client.CreateSession(ctx, &copilot.SessionConfig{
-		Model:               cfg.Model,
-		ReasoningEffort:     cfg.ReasoningEffort,
-		WorkingDirectory:    cfg.VaultPath,
-		OnPermissionRequest: newPermissionPolicy(log),
-		SystemMessage:       &copilot.SystemMessageConfig{Content: systemPrompt},
-	})
+	session, err := client.CreateSession(ctx, sessionConfig(cfg, log))
+	if err != nil && cfg.ReasoningEffort != "" && unsupportedReasoningEffort(err) {
+		// Safety net: the configured model rejects an explicit reasoning-effort
+		// setting. Retry once without it rather than failing the whole run.
+		log.Warn("model does not support reasoning effort; retrying without it",
+			"model", cfg.Model, "reasoningEffort", cfg.ReasoningEffort)
+		sc := sessionConfig(cfg, log)
+		sc.ReasoningEffort = ""
+		session, err = client.CreateSession(ctx, sc)
+	}
 	if err != nil {
 		return fmt.Errorf("create session: %w", err)
 	}
@@ -116,6 +119,24 @@ func Run(ctx context.Context, log *slog.Logger, cfg *config.Config) error {
 	mu.Lock()
 	defer mu.Unlock()
 	return runErr
+}
+
+// sessionConfig builds the SessionConfig for a run. ReasoningEffort is left
+// empty (omitted) unless explicitly configured, since some models reject it.
+func sessionConfig(cfg *config.Config, log *slog.Logger) *copilot.SessionConfig {
+	return &copilot.SessionConfig{
+		Model:               cfg.Model,
+		ReasoningEffort:     cfg.ReasoningEffort,
+		WorkingDirectory:    cfg.VaultPath,
+		OnPermissionRequest: newPermissionPolicy(log),
+		SystemMessage:       &copilot.SystemMessageConfig{Content: systemPrompt},
+	}
+}
+
+// unsupportedReasoningEffort reports whether an error is the runtime's
+// "model does not support reasoning effort" rejection.
+func unsupportedReasoningEffort(err error) bool {
+	return err != nil && strings.Contains(err.Error(), "does not support reasoning effort")
 }
 
 // isFatal reports whether a session error type means the run cannot succeed.
