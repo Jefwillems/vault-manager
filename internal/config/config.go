@@ -4,7 +4,6 @@ package config
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -29,11 +28,6 @@ type Config struct {
 	RunTimeout time.Duration
 	// Force runs the agent even when no unprocessed braindumps are found.
 	Force bool
-	// ExtraLayoutDirs are additional vault-relative folders to pre-create beyond
-	// the built-in Layout, so new sections can be added by editing the CronJob
-	// (and AGENTS.md) without rebuilding the image. Sourced from EXTRA_LAYOUT_DIRS
-	// as a comma-separated list.
-	ExtraLayoutDirs []string
 }
 
 // Load reads configuration from the environment, applying defaults, and
@@ -62,12 +56,6 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("FORCE: %w", err)
 	}
 	cfg.Force = force
-
-	extraDirs, err := parseLayoutDirs(os.Getenv("EXTRA_LAYOUT_DIRS"))
-	if err != nil {
-		return nil, fmt.Errorf("EXTRA_LAYOUT_DIRS: %w", err)
-	}
-	cfg.ExtraLayoutDirs = extraDirs
 
 	if cfg.GitHubToken == "" {
 		return nil, fmt.Errorf("COPILOT_GITHUB_TOKEN is required")
@@ -103,24 +91,4 @@ func parseBool(v string) (bool, error) {
 		return false, nil
 	}
 	return strconv.ParseBool(v)
-}
-
-// parseLayoutDirs splits a comma-separated list of vault-relative folders,
-// trimming blanks. Each entry must stay inside the vault: absolute paths and
-// `..` escapes are rejected so a bad env var can't make the harness create
-// directories outside the vault root.
-func parseLayoutDirs(v string) ([]string, error) {
-	var dirs []string
-	for _, part := range strings.Split(v, ",") {
-		p := strings.TrimSpace(part)
-		if p == "" {
-			continue
-		}
-		clean := filepath.Clean(p)
-		if filepath.IsAbs(clean) || clean == ".." || strings.HasPrefix(clean, ".."+string(filepath.Separator)) {
-			return nil, fmt.Errorf("invalid layout dir %q: must be a relative path inside the vault", p)
-		}
-		dirs = append(dirs, clean)
-	}
-	return dirs, nil
 }

@@ -39,7 +39,6 @@ func run() int {
 		"reasoningEffort", cfg.ReasoningEffort,
 		"timeout", cfg.RunTimeout,
 		"force", cfg.Force,
-		"extraLayoutDirs", cfg.ExtraLayoutDirs,
 	)
 
 	// Pre-flight: skip the (billable) model call when there's nothing to do.
@@ -54,11 +53,12 @@ func run() int {
 		return 0
 	}
 
-	// Pre-create the folder skeleton so the agent (which can only read/write
-	// files, not create directories) can write notes straight away. Extra dirs
-	// from EXTRA_LAYOUT_DIRS let new sections be added without an image rebuild.
-	if err := vault.EnsureLayout(cfg.VaultPath, cfg.ExtraLayoutDirs...); err != nil {
-		log.Error("ensuring vault layout", "error", err)
+	// Ensure only the folders the harness itself owns as I/O (the braindump inbox
+	// and the processed-braindump archive). The vault's content structure is
+	// self-describing — the agent discovers folders + READMEs at runtime — so the
+	// harness deliberately creates nothing else.
+	if err := vault.EnsureIODirs(cfg.VaultPath, cfg.BraindumpDir); err != nil {
+		log.Error("ensuring vault I/O directories", "error", err)
 		return 1
 	}
 

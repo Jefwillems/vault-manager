@@ -14,29 +14,22 @@ import (
 	"strings"
 )
 
-// Layout is the set of folders the agent writes into, relative to the vault
-// root. vault-manager creates them up front so the agent only ever reads and
-// writes files (the Copilot file tools cannot create directories, and the
-// minimal container image has no shell to run `mkdir`).
-var Layout = []string{
-	"People",
-	"Meetings",
-	"Actions",
-	"ADR",
-	"Notes",
-	"History",
-	ArchiveBraindumps,
-}
+// Layout note: vault-manager is deliberately structure-free. The vault's content
+// folders (People/, Meetings/, Notes/, …) are owned and described by the vault
+// itself (each folder carries a README.md; see AGENTS.md), so the harness neither
+// hardcodes nor pre-creates them. It only ensures the two folders it directly
+// owns as I/O: the braindump inbox and the processed-braindump archive.
 
 // ArchiveBraindumps is the vault-relative destination for processed braindumps.
 const ArchiveBraindumps = "Archive/Braindumps"
 
-// EnsureLayout creates the standard vault folders if they don't already exist,
-// plus any extra vault-relative folders passed in (e.g. from EXTRA_LAYOUT_DIRS).
-// Extra dirs let new vault sections be added without rebuilding the image; they
-// are assumed pre-validated as safe relative paths by the caller (see config).
-func EnsureLayout(vaultPath string, extra ...string) error {
-	for _, dir := range append(append([]string{}, Layout...), extra...) {
+// EnsureIODirs creates only the folders the harness itself reads from and writes
+// to: the braindump inbox (braindumpDir) and the processed-braindump archive.
+// The vault's content structure is self-describing and owned by the vault, so the
+// harness intentionally does not create or assume any other folders — the agent
+// discovers them by listing the tree and reading folder READMEs.
+func EnsureIODirs(vaultPath, braindumpDir string) error {
+	for _, dir := range []string{braindumpDir, ArchiveBraindumps} {
 		if err := os.MkdirAll(filepath.Join(vaultPath, dir), 0o755); err != nil {
 			return fmt.Errorf("creating %s: %w", dir, err)
 		}

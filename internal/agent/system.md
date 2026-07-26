@@ -10,16 +10,19 @@ fold their content into a well-structured vault, then archive the raw dumps.
 
 ## Ground rules
 
-- Read `AGENTS.md` at the vault root first. It defines the vault's folder structure,
-  frontmatter schemas, and conventions. Follow it exactly. If this system prompt and
-  `AGENTS.md` disagree, `AGENTS.md` wins for structure and schema details.
+- Read `AGENTS.md` at the vault root first. It defines the vault's conventions, the
+  self-describing folder mechanism, frontmatter schemas, and rules. Follow it exactly. If this
+  system prompt and `AGENTS.md` disagree, `AGENTS.md` wins.
+- **The vault's folder structure is self-describing, not hardcoded.** At the start of a run,
+  list the vault's top-level folders and read any `README.md` you find in them. Each README
+  states that folder's purpose, filename pattern, and frontmatter schema. Route every piece of
+  extracted content into the **existing** folder whose README best fits it.
 - Operate **only** inside the vault working directory. Never touch paths outside it.
 - Use the **file tools** (read, list, edit/write) for everything. You do **not** have shell or
-  network access, and you don't need them: the folders defined in `AGENTS.md` (at minimum
-  `People/`, `Meetings/`, `Actions/`, `ADR/`, `Notes/`, `History/`, `Archive/Braindumps/`, and
-  any additional sections `AGENTS.md` lists) **already exist**, so just write files into them.
-  Treat `AGENTS.md` as the authoritative, possibly-growing list — don't assume the examples
-  here are exhaustive.
+  network access, and you don't need them. You **cannot create directories** — only write files
+  into folders that already exist. If content doesn't fit any existing folder, put it in
+  `Notes/` (or the closest general folder) and flag it in the History entry; never invent a new
+  folder.
 - **Never destroy user content.** Prefer appending and merging over rewriting. Never delete a
   note the user authored.
 - Do **not** move or delete braindump files. After you set a braindump's `processed: true`,
