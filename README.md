@@ -38,6 +38,9 @@ All configuration is via environment variables:
 | `RUN_TIMEOUT`             | `30m`                  | Maximum wall-clock time for a single run (Go duration string).              |
 | `LOG_LEVEL`               | `info`                 | Log verbosity (`debug`\|`info`\|`warn`\|`error`).                          |
 | `FORCE`                   | `false`                | Run the agent even when no unprocessed braindumps are found.                |
+| `PUSHGATEWAY_URL`         | *(empty)*              | Base URL of a Prometheus Pushgateway. Empty disables metrics.               |
+| `PUSHGATEWAY_JOB`         | `vault-manager`        | Pushgateway `job` grouping label for pushed metrics.                        |
+| `INSTANCE_ID`             | *(hostname)*           | Pushgateway `instance` grouping label (defaults to the pod/host name).      |
 
 ## Running with Docker
 
@@ -86,6 +89,46 @@ spec:
 ```
 
 Pin the image to a specific digest (printed as a workflow summary on each push to `main`) for reproducible deployments.
+
+## Metrics & observability
+
+vault-manager is a short-lived CronJob: it starts, processes the vault, and exits. Prometheus *scrapes* long-running targets, so it can never scrape a job that has already terminated. The standard pattern for batch/cron workloads is the **[Prometheus Pushgateway](https://github.com/prometheus/pushgateway)**: at the end of each run vault-manager *pushes* its outcome to the gateway, and Prometheus scrapes the gateway on its own schedule. Each run overwrites the previous sample for its grouping key (`job`/`instance`), so the gateway always reflects the most recent run.
+
+Metrics are opt-in: set `PUSHGATEWAY_URL` to enable them; leave it empty and the harness runs unchanged with no monitoring dependency.
+
+Pushed gauges (job=`vault-manager`, instance=pod name):
+
+| Metric                                      | Meaning                                                        |
+|---------------------------------------------|----------------------------------------------------------------|
+| `vault_manager_last_run_success`            | `1` if the last run succeeded, `0` if it failed.               |
+| `vault_manager_last_run_timestamp_seconds`  | Unix time the last run completed (alert on staleness).         |
+| `vault_manager_run_duration_seconds`        | Wall-clock duration of the last run.                           |
+| `vault_manager_braindumps_unprocessed`      | Unprocessed braindumps found at the start of the run.          |
+| `vault_manager_braindumps_archived`         | Braindumps archived (processed) during the run.                |
+
+Example alerts on a failed or overdue run:
+
+```yaml
+- alert: VaultManagerRunFailed
+  expr: vault_manager_last_run_success == 0
+  for: 5m
+- alert: VaultManagerRunStale
+  expr: time() - vault_manager_last_run_timestamp_seconds > 172800  # >48h since last run
+```
+
+### Deploying
+
+Ready-to-apply manifests live in [`deploy/`](deploy/):
+
+- [`deploy/cronjob.yaml`](deploy/cronjob.yaml) — the CronJob with the `PUSHGATEWAY_*` env vars wired in.
+- [`deploy/grafana-dashboard-configmap.yaml`](deploy/grafana-dashboard-configmap.yaml) — a Grafana dashboard delivered as a ConfigMap (labelled `grafana_dashboard: "1"` so the Grafana sidecar auto-imports it). The raw dashboard is [`deploy/grafana-dashboard.json`](deploy/grafana-dashboard.json).
+
+```bash
+kubectl apply -f deploy/cronjob.yaml
+kubectl apply -f deploy/grafana-dashboard-configmap.yaml   # into your Grafana sidecar's namespace
+```
+
+You need a Pushgateway reachable at `PUSHGATEWAY_URL` (e.g. the `prometheus-pushgateway` chart, or the one bundled with kube-prometheus-stack) and Prometheus configured to scrape it.
 
 ## Building from source
 

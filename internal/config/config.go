@@ -28,6 +28,15 @@ type Config struct {
 	RunTimeout time.Duration
 	// Force runs the agent even when no unprocessed braindumps are found.
 	Force bool
+	// PushgatewayURL is the base URL of a Prometheus Pushgateway. Because
+	// vault-manager is a short-lived CronJob that can't be scraped, run metrics
+	// are pushed here at the end of each run. Empty disables metrics entirely.
+	PushgatewayURL string
+	// PushgatewayJob is the Pushgateway "job" grouping label for pushed metrics.
+	PushgatewayJob string
+	// InstanceID is the "instance" grouping label for pushed metrics; it
+	// defaults to the hostname (the pod name under Kubernetes).
+	InstanceID string
 }
 
 // Load reads configuration from the environment, applying defaults, and
@@ -43,6 +52,9 @@ func Load() (*Config, error) {
 		ReasoningEffort: os.Getenv("COPILOT_REASONING_EFFORT"),
 		GitHubToken:     os.Getenv("COPILOT_GITHUB_TOKEN"),
 		LogLevel:        env("LOG_LEVEL", "info"),
+		PushgatewayURL:  os.Getenv("PUSHGATEWAY_URL"),
+		PushgatewayJob:  env("PUSHGATEWAY_JOB", "vault-manager"),
+		InstanceID:      env("INSTANCE_ID", hostname()),
 	}
 
 	timeout, err := parseDuration(env("RUN_TIMEOUT", "30m"))
@@ -72,6 +84,15 @@ func env(key, fallback string) string {
 		return v
 	}
 	return fallback
+}
+
+// hostname returns the OS hostname (the pod name under Kubernetes), falling back
+// to "unknown" so a metrics grouping label is always present.
+func hostname() string {
+	if h, err := os.Hostname(); err == nil && h != "" {
+		return h
+	}
+	return "unknown"
 }
 
 func parseDuration(v string) (time.Duration, error) {

@@ -10,9 +10,11 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"vault-manager/internal/agent"
 	"vault-manager/internal/config"
+	"vault-manager/internal/metrics"
 	"vault-manager/internal/vault"
 )
 
@@ -23,7 +25,7 @@ func main() {
 // run holds the real logic so deferred cleanup runs before the process exits.
 // It returns the process exit code (0 success, non-zero failure) so the CronJob
 // can report and alert on failed runs.
-func run() int {
+func run() (code int) {
 	cfg, err := config.Load()
 	if err != nil {
 		// Logger isn't configured yet; use a default stderr logger.
@@ -41,12 +43,28 @@ func run() int {
 		"force", cfg.Force,
 	)
 
+	// Record and push run metrics to the Pushgateway (no-op when unconfigured).
+	// vault-manager is a short-lived CronJob and can't be scraped, so it pushes
+	// the run's outcome instead. The deferred push runs on every exit path, and
+	// success is derived from the final exit code.
+	rec := metrics.New(cfg.PushgatewayURL, cfg.PushgatewayJob, cfg.InstanceID)
+	start := time.Now()
+	defer func() {
+		rec.SetOutcome(code == 0, time.Since(start))
+		if err := rec.Push(context.Background()); err != nil {
+			log.Warn("pushing metrics", "error", err)
+		} else if rec.Enabled() {
+			log.Info("pushed run metrics", "pushgateway", cfg.PushgatewayURL, "instance", cfg.InstanceID)
+		}
+	}()
+
 	// Pre-flight: skip the (billable) model call when there's nothing to do.
 	pending, err := vault.CountUnprocessed(cfg.VaultPath, cfg.BraindumpDir)
 	if err != nil {
 		log.Error("scanning braindumps", "error", err)
 		return 1
 	}
+	rec.SetUnprocessed(pending)
 	log.Info("braindump scan complete", "unprocessed", pending)
 	if pending == 0 && !cfg.Force {
 		log.Info("no unprocessed braindumps; nothing to do (set FORCE=true to override)")
@@ -80,6 +98,7 @@ func run() int {
 		log.Error("archiving processed braindumps", "error", err)
 		return 1
 	}
+	rec.SetArchived(len(moved))
 	log.Info("archived processed braindumps", "count", len(moved), "files", moved)
 
 	log.Info("vault-manager finished")
