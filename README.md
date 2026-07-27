@@ -1,0 +1,120 @@
+# vault-manager
+
+A nightly job that uses the [GitHub Copilot SDK](https://github.com/github/copilot-sdk) to automatically organize free-form "braindump" notes into a structured [Obsidian](https://obsidian.md) knowledge base.
+
+## How it works
+
+Throughout the day you drop raw, unstructured notes (braindumps) into a designated inbox folder inside your vault. At night, vault-manager:
+
+1. **Scans** the braindump inbox for notes with `processed: false` in their frontmatter.
+2. **Launches** an embedded Copilot agent (the *Vault Librarian*) with file-only access to the vault.
+3. **Processes** each braindump — extracting people, meetings, decisions (ADRs), and action items, then folding them into the vault's existing structure using `[[wikilinks]]` for cross-referencing.
+4. **Writes** a dated run summary to the vault's `History/` folder.
+5. **Archives** processed braindumps to `Archive/Braindumps/` once the agent finishes.
+
+The vault's folder structure is self-describing: each top-level folder carries a `README.md` that defines its purpose, filename conventions, and frontmatter schema. The agent reads these at runtime rather than relying on any hardcoded layout. The overall contract between the harness and the agent is defined in an `AGENTS.md` file at the vault root.
+
+### Security model
+
+The agent runs with a restrictive permission policy — file reads and writes are allowed, but shell commands and network requests are denied. This prevents braindump content from coaxing the agent into exfiltrating credentials or running arbitrary commands.
+
+## Prerequisites
+
+- A GitHub account with an active **GitHub Copilot** subscription.
+- A personal access token (or similar) with Copilot API access.
+- A vault directory structured with an `AGENTS.md` and per-folder `README.md` files.
+
+## Configuration
+
+All configuration is via environment variables:
+
+| Variable                  | Default                | Description                                                                 |
+|---------------------------|------------------------|-----------------------------------------------------------------------------|
+| `COPILOT_GITHUB_TOKEN`    | *(required)*           | GitHub token used to authenticate with the Copilot API.                     |
+| `VAULT_PATH`              | `/app/data/vault`      | Absolute path to the vault directory.                                       |
+| `BRAINDUMP_DIR`           | `Braindumps`           | Vault-relative folder that acts as the braindump inbox.                     |
+| `COPILOT_MODEL`           | `claude-sonnet-4.5`    | Copilot model to use for the agent session.                                 |
+| `COPILOT_REASONING_EFFORT`| *(empty)*              | Reasoning effort for supported models (`low`\|`medium`\|`high`\|`xhigh`).  |
+| `RUN_TIMEOUT`             | `30m`                  | Maximum wall-clock time for a single run (Go duration string).              |
+| `LOG_LEVEL`               | `info`                 | Log verbosity (`debug`\|`info`\|`warn`\|`error`).                          |
+| `FORCE`                   | `false`                | Run the agent even when no unprocessed braindumps are found.                |
+
+## Running with Docker
+
+```bash
+docker run --rm \
+  -e COPILOT_GITHUB_TOKEN=ghp_... \
+  -e VAULT_PATH=/vault \
+  -v /path/to/your/vault:/vault \
+  ghcr.io/jefwillems/vault-manager:latest
+```
+
+## Kubernetes CronJob
+
+A typical deployment mounts the vault from a PVC (e.g. synced by [obsidian-livesync](https://github.com/vrtmrz/obsidian-livesync)'s CouchDB bridge) and runs vault-manager on a nightly schedule:
+
+```yaml
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: vault-manager
+spec:
+  schedule: "0 2 * * *"   # 02:00 every night
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: vault-manager
+              image: ghcr.io/jefwillems/vault-manager:latest
+              env:
+                - name: COPILOT_GITHUB_TOKEN
+                  valueFrom:
+                    secretKeyRef:
+                      name: copilot-token
+                      key: token
+                - name: VAULT_PATH
+                  value: /app/data/vault
+              volumeMounts:
+                - name: vault
+                  mountPath: /app/data/vault
+          volumes:
+            - name: vault
+              persistentVolumeClaim:
+                claimName: obsidian-vault
+```
+
+Pin the image to a specific digest (printed as a workflow summary on each push to `main`) for reproducible deployments.
+
+## Building from source
+
+The binary embeds the Copilot CLI via the SDK bundler — no separate `copilot` binary is needed at runtime.
+
+```bash
+# Embed the CLI for the current platform and build
+go tool bundler --platform linux/amd64 --output cmd/vault-manager
+CGO_ENABLED=0 go build -o vault-manager ./cmd/vault-manager
+```
+
+Or just build the Docker image, which handles all of this automatically:
+
+```bash
+docker build -t vault-manager .
+```
+
+## CI
+
+Pushes to `main` and manual triggers build a multi-tag Docker image and push it to GHCR (`ghcr.io/jefwillems/vault-manager`). The workflow uses Docker Buildx and attaches the image digest to the workflow summary.
+
+## Vault conventions
+
+vault-manager expects the vault to follow a self-describing layout:
+
+- **`AGENTS.md`** at the vault root — defines the schema, frontmatter conventions, folder routing rules, and the provenance/wikilink contract.
+- **`<Folder>/README.md`** in each content folder — defines that folder's purpose, filename pattern, and frontmatter schema.
+- **Braindump frontmatter** — each braindump note must include `processed: false` to be picked up. After processing, the agent sets it to `processed: true` and the harness moves the file to `Archive/Braindumps/`.
+
+## License
+
+See [LICENSE](LICENSE).
