@@ -1,0 +1,58 @@
+# vault-manager CronJob with Prometheus Pushgateway metrics enabled.
+#
+# vault-manager is a short-lived batch job: it starts, processes the vault, and
+# exits. Prometheus scrapes long-running targets, so it can't scrape a job that
+# has already terminated. Instead, the job pushes its run metrics to a
+# Pushgateway (PUSHGATEWAY_URL), which Prometheus then scrapes. Remove the
+# PUSHGATEWAY_* env vars to disable metrics.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: vault-manager
+  labels:
+    app.kubernetes.io/name: vault-manager
+spec:
+  schedule: "0 2 * * *" # 02:00 every night
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: vault-manager
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: vault-manager
+              image: ghcr.io/jefwillems/vault-manager:latest
+              env:
+                - name: COPILOT_GITHUB_TOKEN
+                  valueFrom:
+                    secretKeyRef:
+                      name: copilot-token
+                      key: token
+                - name: VAULT_PATH
+                  value: /app/data/vault
+                # --- metrics ---------------------------------------------------
+                # Base URL of the Prometheus Pushgateway (Service DNS name).
+                - name: PUSHGATEWAY_URL
+                  value: http://prometheus-pushgateway.monitoring.svc.cluster.local:9091
+                # "job" grouping label under which samples are stored.
+                - name: PUSHGATEWAY_JOB
+                  value: vault-manager
+                # "instance" grouping label; default to the pod name so parallel
+                # deployments don't overwrite each other's samples.
+                - name: INSTANCE_ID
+                  valueFrom:
+                    fieldRef:
+                      fieldPath: metadata.name
+              volumeMounts:
+                - name: vault
+                  mountPath: /app/data/vault
+          volumes:
+            - name: vault
+              persistentVolumeClaim:
+                claimName: obsidian-vault
