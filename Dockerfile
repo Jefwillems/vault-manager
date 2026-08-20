@@ -3,7 +3,7 @@
 # ---- build stage -------------------------------------------------------------
 # Bundles the GitHub Copilot CLI into the binary via the SDK's bundler, then
 # builds a static (CGO_ENABLED=0) vault-manager binary.
-FROM golang:1.26-bookworm AS build
+FROM golang:1.27-bookworm AS build
 
 WORKDIR /src
 
