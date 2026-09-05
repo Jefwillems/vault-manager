@@ -3,7 +3,7 @@ module vault-manager
 go 1.26
 
 require (
-	github.com/github/copilot-sdk/go v1.0.11
+	github.com/github/copilot-sdk/go v1.0.13
 	github.com/prometheus/client_golang v1.24.1
 )
 
